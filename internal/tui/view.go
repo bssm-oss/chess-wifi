@@ -136,7 +136,7 @@ func (m *model) renderBoard() string {
 		if perspective == game.Black {
 			worldRank = 7 - vrank
 		}
-		label := lipgloss.NewStyle().Width(2).Foreground(colorMuted).Render(fmt.Sprintf("%d", worldRank+1))
+		label := lipgloss.NewStyle().Width(2).Foreground(colorMuted).Render(fmt.Sprintf("%d", rankLabelForView(vrank, perspective)))
 		var top []string
 		var bottom []string
 		for vfile := 0; vfile < 8; vfile++ {
@@ -163,6 +163,13 @@ func (m *model) renderBoard() string {
 	lines = append(lines, lipgloss.NewStyle().Width(2).Render(" ")+strings.Join(files, ""))
 	boardBlock := strings.Join(lines, "\n")
 	return panelStyle.Render(boardBlock)
+}
+
+func rankLabelForView(visibleRank int, perspective game.Side) int {
+	if perspective == game.Black {
+		return 8 - visibleRank
+	}
+	return visibleRank + 1
 }
 
 func (m *model) renderSquare(square string, file, rank int) (string, string) {
