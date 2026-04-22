@@ -25,14 +25,27 @@ const (
 )
 
 const (
-	cellWidth  = 5
-	cellHeight = 2
-	boardX     = 2
-	boardY     = 8
+	cellWidth       = 5
+	cellHeight      = 2
+	framePaddingX   = 2
+	framePaddingY   = 1
+	headerHeight    = 3
+	panelBorderSize = 1
+	panelPaddingX   = 2
+	panelPaddingY   = 1
+	rankLabelWidth  = 2
+	boardRows       = 16
+	boardFilesY     = 16
 )
 
-type hostAcceptedMsg struct{ session *session.PeerSession }
-type hostErrorMsg struct{ err error }
+type hostAcceptedMsg struct {
+	listener *session.HostListener
+	session  *session.PeerSession
+}
+type hostErrorMsg struct {
+	listener *session.HostListener
+	err      error
+}
 type joinResultMsg struct {
 	session *session.PeerSession
 	err     error
@@ -64,6 +77,7 @@ type model struct {
 	message      string
 	width        int
 	height       int
+	viewSide     game.Side
 	cursorFile   int
 	cursorRank   int
 	selected     string
@@ -97,9 +111,10 @@ func newModel() *model {
 		screen:      screenMenu,
 		hostInputs:  []textinput.Model{hostName, hostPort},
 		joinInputs:  []textinput.Model{joinName, joinAddr},
+		viewSide:    game.White,
 		cursorFile:  4,
 		cursorRank:  1,
-		boardBounds: rect{x: boardX, y: boardY, w: cellWidth * 8, h: cellHeight * 8},
+		boardBounds: rect{x: 0, y: 0, w: cellWidth * 8, h: cellHeight * 8},
 		message:     "같은 Wi-Fi에서 직접 연결되는 체스를 준비하세요.",
 	}
 }
@@ -117,13 +132,20 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		return m.handleMouse(msg)
 	case hostAcceptedMsg:
+		if m.listener == nil || m.listener != msg.listener || m.screen != screenWaiting {
+			return m, nil
+		}
 		m.listener = nil
 		m.peerSession = msg.session
+		m.viewSide = msg.session.Role()
 		m.snapshot = msg.session.Snapshot()
 		m.screen = screenMatch
 		m.message = fmt.Sprintf("%s connected. White moves first.", msg.session.Peer().Name)
 		return m, waitForSessionEvent(msg.session)
 	case hostErrorMsg:
+		if m.listener == nil || m.listener != msg.listener || m.screen != screenWaiting {
+			return m, nil
+		}
 		m.screen = screenError
 		m.message = msg.err.Error()
 		m.listener = nil
@@ -136,6 +158,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.peerSession = msg.session
+		m.viewSide = msg.session.Role()
 		m.snapshot = msg.session.Snapshot()
 		m.screen = screenMatch
 		m.message = fmt.Sprintf("Connected to %s.", msg.session.Peer().Name)
@@ -242,6 +265,7 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.screen = screenMenu
 			m.message = "새 매치를 시작할 수 있습니다."
 			m.peerSession = nil
+			m.viewSide = game.White
 			m.listener = nil
 			m.clearSelection()
 		case "q", "ctrl+c":
@@ -251,6 +275,13 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
+}
+
+func (m *model) side() game.Side {
+	if m.viewSide == "" {
+		return game.White
+	}
+	return m.viewSide
 }
 
 func (m *model) handlePromotionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -344,7 +375,7 @@ func (m *model) activateSquare(square string) (tea.Model, tea.Cmd) {
 	if m.peerSession == nil || m.snapshot.Status != "active" {
 		return m, nil
 	}
-	if m.snapshot.Turn != m.peerSession.Role() {
+	if m.snapshot.Turn != m.side() {
 		m.message = "상대 턴입니다."
 		return m, nil
 	}
@@ -354,10 +385,10 @@ func (m *model) activateSquare(square string) (tea.Model, tea.Cmd) {
 			m.message = err.Error()
 			return m, nil
 		}
-		if !ok || side != m.peerSession.Role() || piece == 0 {
+		if !ok || side != m.side() || piece == 0 {
 			return m, nil
 		}
-		moves, err := game.LegalMovesForSquare(m.snapshot.FEN, m.peerSession.Role(), square)
+		moves, err := game.LegalMovesForSquare(m.snapshot.FEN, m.side(), square)
 		if err != nil {
 			m.message = err.Error()
 			return m, nil
@@ -442,14 +473,14 @@ func waitForHostAccepted(listener *session.HostListener) tea.Cmd {
 		select {
 		case peer, ok := <-listener.Accepted():
 			if ok && peer != nil {
-				return hostAcceptedMsg{session: peer}
+				return hostAcceptedMsg{listener: listener, session: peer}
 			}
 		case err, ok := <-listener.Errors():
 			if ok && err != nil {
-				return hostErrorMsg{err: err}
+				return hostErrorMsg{listener: listener, err: err}
 			}
 		}
-		return hostErrorMsg{err: fmt.Errorf("host listener closed")}
+		return hostErrorMsg{listener: listener, err: fmt.Errorf("host listener closed")}
 	}
 }
 
