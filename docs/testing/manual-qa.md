@@ -34,6 +34,7 @@ go run ./cmd/chess-wifi match --help
 go test ./...
 go build ./...
 go test ./internal/tui -run TestHandleMouseSelectsPieceFromRenderedBoard -v
+go test ./internal/tui -run TestMouseClickMoveSyncsAcrossPeerSessions -v
 ```
 
 관찰 결과:
@@ -41,12 +42,17 @@ go test ./internal/tui -run TestHandleMouseSelectsPieceFromRenderedBoard -v
 - 전체 테스트 통과
 - 전체 빌드 통과
 - 클릭 가능한 보드 선택 경로 검증 테스트 통과
+- 마우스 클릭으로 `e2e4` 수를 전송하고 peer 세션까지 동기화하는 TUI 통합 테스트 통과
 
 테스트 출력 요약:
 
 ```text
 === RUN   TestHandleMouseSelectsPieceFromRenderedBoard
 --- PASS: TestHandleMouseSelectsPieceFromRenderedBoard (0.00s)
+PASS
+
+=== RUN   TestMouseClickMoveSyncsAcrossPeerSessions
+--- PASS: TestMouseClickMoveSyncsAcrossPeerSessions (0.00s)
 PASS
 ```
 
@@ -83,5 +89,8 @@ GUEST_SNIP=...LAN Match...
 ## 남은 수동 QA 권장 항목
 
 - 실제 같은 Wi-Fi의 두 장치에서 Host/Join 검증
-- 마우스로 실제 말 이동 후 상대 보드 반영 확인
 - `r` 기권 결과가 양쪽 화면에 반영되는지 확인
+
+## 현재 한계
+
+- 이번 세션은 단일 개발 환경과 PTY 기반 시뮬레이션에서 수행되었기 때문에, 두 대의 실제 물리 장치가 같은 Wi-Fi에 붙은 상태의 검증은 별도로 다시 수행하는 것이 가장 안전합니다.
