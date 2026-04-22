@@ -122,6 +122,8 @@ type PeerSession struct {
 	events     chan Event
 	closed     chan struct{}
 	closeOnce  sync.Once
+	eventsOnce sync.Once
+	workers    sync.WaitGroup
 	heartbeats *time.Ticker
 }
 
@@ -164,7 +166,12 @@ func (p *PeerSession) Close() error {
 			p.heartbeats.Stop()
 		}
 		err = p.conn.Close()
-		close(p.events)
+		p.eventsOnce.Do(func() {
+			go func() {
+				p.workers.Wait()
+				close(p.events)
+			}()
+		})
 	})
 	return err
 }
@@ -215,6 +222,7 @@ func newHostSession(conn net.Conn, hostName string) (*PeerSession, error) {
 		closed:     make(chan struct{}),
 		heartbeats: time.NewTicker(HeartbeatEvery),
 	}
+	p.workers.Add(2)
 	go p.readLoop()
 	go p.pingLoop()
 	return p, nil
@@ -265,6 +273,7 @@ func newClientSession(conn net.Conn, name string) (*PeerSession, error) {
 		closed:     make(chan struct{}),
 		heartbeats: time.NewTicker(HeartbeatEvery),
 	}
+	p.workers.Add(2)
 	go p.readLoop()
 	go p.pingLoop()
 	return p, nil
@@ -281,6 +290,7 @@ func (p *PeerSession) applyHostMove(uci string) error {
 }
 
 func (p *PeerSession) readLoop() {
+	defer p.workers.Done()
 	for {
 		select {
 		case <-p.closed:
@@ -354,6 +364,7 @@ func (p *PeerSession) readLoop() {
 }
 
 func (p *PeerSession) pingLoop() {
+	defer p.workers.Done()
 	for {
 		select {
 		case <-p.closed:
@@ -374,6 +385,13 @@ func (p *PeerSession) setSnapshot(snapshot game.Snapshot) {
 }
 
 func (p *PeerSession) emit(event Event) {
+	select {
+	case <-p.closed:
+		if event.Type != EventClosed {
+			return
+		}
+	default:
+	}
 	select {
 	case p.events <- event:
 	default:

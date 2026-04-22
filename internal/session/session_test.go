@@ -60,3 +60,47 @@ func TestHostJoinAndMoveSync(t *testing.T) {
 		t.Fatal("timed out waiting for guest snapshot")
 	}
 }
+
+func TestCloseDoesNotPanicAndNotifiesPeer(t *testing.T) {
+	hostListener, err := StartHost("Host", 9103)
+	if err != nil {
+		t.Fatalf("StartHost returned error: %v", err)
+	}
+	t.Cleanup(func() { _ = hostListener.Close() })
+
+	acceptedCh := make(chan *PeerSession, 1)
+	go func() {
+		acceptedCh <- <-hostListener.Accepted()
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	guest, err := Join(ctx, "127.0.0.1:9103", "Guest")
+	if err != nil {
+		t.Fatalf("Join returned error: %v", err)
+	}
+	t.Cleanup(func() { _ = guest.Close() })
+
+	var host *PeerSession
+	select {
+	case host = <-acceptedCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for host acceptance")
+	}
+
+	if err := host.Close(); err != nil {
+		t.Fatalf("Close returned error: %v", err)
+	}
+
+	select {
+	case event, ok := <-guest.Events():
+		if !ok {
+			t.Fatal("guest events closed before close notification")
+		}
+		if event.Type != EventClosed {
+			t.Fatalf("expected close event, got %s", event.Type)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for guest close event")
+	}
+}
