@@ -81,6 +81,30 @@ HOST_SNIP=...Guest connected. White moves first.
 GUEST_SNIP=...LAN Match...
 ```
 
+### 4. 세션 종료 안정성 회귀 확인
+
+실행 방법:
+
+- `/tmp/chess-wifi-local match` 바이너리를 PTY 두 개에서 동시에 실행
+- Host는 기본 포트 `8787`로 대기
+- Guest는 `127.0.0.1:8787` 로 Join
+- 연결 후 Host에서 `q` 입력
+
+관찰 결과:
+
+- Host 프로세스가 panic 없이 정상 종료됨
+- Guest 화면이 `상태 알림` / `connection closed` 로 전환됨
+- 이전에 재현되던 `send on closed channel` panic이 더 이상 발생하지 않음
+
+실행 출력 요약:
+
+```text
+HOST_EXIT=0
+GUEST_CLOSE_SCREEN=True
+GUEST_SNIP=...connection closed...
+PANIC=False
+```
+
 ## 해석
 
 - 비인터랙티브 파이프 환경에서는 Bubble Tea가 `/dev/tty` 를 요구하므로 단순 파이프 대신 PTY 기반 검증이 필요했습니다.
