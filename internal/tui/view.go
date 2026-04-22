@@ -128,17 +128,15 @@ func (m *model) renderMatch() string {
 }
 
 func (m *model) renderBoard() string {
-	perspective := game.White
-	if m.peerSession != nil {
-		perspective = m.peerSession.Role()
-	}
+	m.updateLayoutBounds()
+	perspective := m.side()
 	var lines []string
 	for vrank := 7; vrank >= 0; vrank-- {
 		worldRank := vrank
 		if perspective == game.Black {
 			worldRank = 7 - vrank
 		}
-		label := lipgloss.NewStyle().Width(2).Foreground(colorMuted).Render(fmt.Sprintf("%d", vrank+1))
+		label := lipgloss.NewStyle().Width(2).Foreground(colorMuted).Render(fmt.Sprintf("%d", worldRank+1))
 		var top []string
 		var bottom []string
 		for vfile := 0; vfile < 8; vfile++ {
@@ -193,10 +191,9 @@ func (m *model) renderSquare(square string, file, rank int) (string, string) {
 }
 
 func (m *model) renderSidebar() string {
-	role := "spectator"
+	role := string(m.side())
 	peer := "—"
 	if m.peerSession != nil {
-		role = string(m.peerSession.Role())
 		peer = fmt.Sprintf("%s (%s)", m.peerSession.Peer().Name, m.peerSession.Peer().Side)
 	}
 	self := "—"

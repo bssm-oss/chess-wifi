@@ -2,7 +2,13 @@ package tui
 
 import "github.com/bssm-oss/chess-wifi/internal/game"
 
+func (m *model) updateLayoutBounds() {
+	originX, originY := boardCellOrigin()
+	m.boardBounds = rect{x: originX, y: originY, w: cellWidth * 8, h: cellHeight * 8}
+}
+
 func (m *model) squareFromMouse(x, y int) (string, bool) {
+	m.updateLayoutBounds()
 	if x < m.boardBounds.x || y < m.boardBounds.y {
 		return "", false
 	}
@@ -15,7 +21,7 @@ func (m *model) squareFromMouse(x, y int) (string, bool) {
 	visibleRank := 7 - (relY / cellHeight)
 	file := visibleFile
 	rank := visibleRank
-	if m.peerSession != nil && m.peerSession.Role() == game.Black {
+	if m.side() == game.Black {
 		file = 7 - visibleFile
 		rank = 7 - visibleRank
 	}
@@ -36,17 +42,27 @@ func (m *model) isLegalTarget(square string) bool {
 }
 
 func (m *model) promotionFromMouse(x, y int) int {
-	baseY := boardY + cellHeight*8 + 6
-	if y < baseY || y > baseY+2 {
+	startX, startY := promotionOrigin()
+	if y < startY || y > startY+1 {
 		return -1
 	}
-	startX := boardX + 2
 	for i := range m.promotion.Options {
-		left := startX + i*5
+		left := startX + i*6
 		right := left + 4
 		if x >= left && x <= right {
 			return i
 		}
 	}
 	return -1
+}
+
+func boardCellOrigin() (int, int) {
+	x := framePaddingX + panelBorderSize + panelPaddingX + rankLabelWidth
+	y := framePaddingY + headerHeight + panelBorderSize + panelPaddingY
+	return x, y
+}
+
+func promotionOrigin() (int, int) {
+	x, y := boardCellOrigin()
+	return x + 1, y + boardRows + 6
 }
