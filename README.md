@@ -35,6 +35,7 @@
 - Go 1.26 이상
 - 같은 LAN/Wi-Fi에 있는 두 대의 장치, 또는 로컬 테스트용 두 터미널
 - TCP 포트 `8787` 접근 가능 환경
+- 자동 매치 목록을 쓰려면 UDP discovery 포트 `18787` 접근 가능 환경
 
 ## 가장 쉬운 설치 방법
 
@@ -48,6 +49,12 @@ curl -fsSL https://raw.githubusercontent.com/bssm-oss/chess-wifi/main/install.sh
 
 ```bash
 chess-wifi match
+```
+
+설치 위치를 직접 지정하고 싶으면 `CHESS_WIFI_INSTALL_DIR`를 사용합니다.
+
+```bash
+CHESS_WIFI_INSTALL_DIR="$HOME/.local/bin" sh -c "$(curl -fsSL https://raw.githubusercontent.com/bssm-oss/chess-wifi/main/install.sh)"
 ```
 
 Go 기본 설치 방식을 선호한다면 아래 명령도 사용할 수 있습니다. 이 경우 Go의 `GOBIN` 또는 `GOPATH/bin`이 `PATH`에 있어야 합니다.
@@ -67,7 +74,7 @@ go run ./cmd/chess-wifi match
 
 ## 사용 방법
 
-### 1. Host 측
+### 1. Host가 방 만들기
 
 ```bash
 chess-wifi match
@@ -75,19 +82,41 @@ chess-wifi match
 
 1. `Host a match` 선택
 2. 이름과 포트 입력
-3. 화면에 표시된 `192.168.x.x:8787` 같은 주소를 상대에게 전달하거나, 상대가 자동 discovery 목록에서 선택할 때까지 대기
+3. 화면에 표시된 `192.168.x.x:8787` 같은 주소를 확인
+4. 상대가 자동 discovery 목록에서 선택할 때까지 대기
+5. 자동 discovery가 안 되면 표시된 주소를 상대에게 직접 전달
 
-### 2. Join 측
+Host가 대기 중이면 다른 사용자의 첫 화면에 아래와 같은 항목이 자동으로 나타납니다.
+
+```text
+열려있는 LAN 매치
+  1. Host · 10.129.57.46:8787 · 0s 전
+목록에서 Enter를 누르면 바로 연결합니다.
+```
+
+### 2. Join이 자동 목록으로 참가하기
 
 ```bash
 chess-wifi match
 ```
 
 1. 첫 화면의 `열려있는 LAN 매치` 목록에서 Host를 선택해 바로 연결
-2. 목록에 없으면 `Join by address` 선택
-3. 이름 입력
-4. Host가 알려준 `IP:PORT` 입력
-5. 연결되면 체스판이 열림
+2. 방향키로 `Join Host · <주소>` 항목 선택
+3. `Enter`
+4. 연결되면 체스판이 열림
+
+### 3. 자동 목록이 안 보일 때 직접 참가하기
+
+```bash
+chess-wifi match
+```
+
+1. `Join by address` 선택
+2. 이름 입력
+3. Host 화면에 표시된 `IP:PORT` 입력
+4. 연결되면 체스판이 열림
+
+자동 목록은 UDP broadcast를 사용합니다. 학교/회사 Wi-Fi, 게스트 네트워크, 방화벽, AP isolation 설정이 UDP `18787`을 막으면 목록에 안 뜰 수 있습니다. 이 경우에도 직접 주소 입력은 계속 사용할 수 있습니다.
 
 ## 조작 방법
 
@@ -108,6 +137,50 @@ go test ./...
 
 ```bash
 go build ./...
+```
+
+설치 스크립트 검증:
+
+```bash
+CHESS_WIFI_INSTALL_DIR=/tmp/chess-wifi-install-test ./install.sh
+/tmp/chess-wifi-install-test/chess-wifi --help
+```
+
+## 검증된 사용자 플로우
+
+이번 릴리스 흐름에서 실제로 확인한 동작입니다.
+
+```text
+1. /tmp/chess-wifi-discovery match 를 PTY 두 개에서 실행
+2. 첫 번째 TUI에서 Host a match 선택
+3. 두 번째 TUI 첫 화면에 Join Host · 10.129.57.46:8787 표시 확인
+4. discovery 목록에서 Enter
+5. Guest 화면: Connected to Host.
+6. Host 화면: Guest connected. White moves first.
+7. Host에서 q 입력
+8. Guest 화면: connection closed
+```
+
+실행한 검증 명령:
+
+```bash
+go test ./... -count=1
+go build ./...
+GOOS=linux GOARCH=amd64 go test -c ./internal/discovery -o /tmp/discovery-linux.test
+CHESS_WIFI_INSTALL_DIR=/tmp/chess-wifi-install-test ./install.sh
+GOBIN=/tmp/chess-wifi-gobin-final go install github.com/bssm-oss/chess-wifi/cmd/chess-wifi@latest
+```
+
+검증 결과:
+
+```text
+go test ./...                         pass
+go build ./...                        pass
+GitHub Actions test                   pass
+CodeRabbit                            pass
+go install ...@latest                 pass
+설치 스크립트 smoke test              pass
+PTY 2개 실제 TUI Host/Join discovery   pass
 ```
 
 ## 주요 디렉터리 구조
