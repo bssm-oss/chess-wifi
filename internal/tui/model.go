@@ -13,6 +13,7 @@ import (
 	"github.com/bssm-oss/chess-wifi/internal/session"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type screen string
@@ -64,6 +65,7 @@ type discoveryResultMsg struct {
 type clipboardResultMsg struct {
 	value string
 	err   error
+	osc   string
 }
 
 type promotionChoice struct {
@@ -115,6 +117,7 @@ type model struct {
 	waitingCancelBounds  rect
 	matchResignBounds    rect
 	matchQuitBounds      rect
+	clipboardOSC         string
 	waitingSince         time.Time
 	quitting             bool
 }
@@ -215,8 +218,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case clipboardResultMsg:
+		m.clipboardOSC = msg.osc
 		if msg.err != nil {
-			m.message = fmt.Sprintf("복사 실패: %v", msg.err)
+			m.message = fmt.Sprintf("터미널 복사 요청됨: %s (시스템 클립보드: %v)", msg.value, msg.err)
 		} else {
 			m.message = fmt.Sprintf("복사됨: %s", msg.value)
 		}
@@ -742,7 +746,7 @@ func scanDiscoveryCmd() tea.Cmd {
 
 func copyCmd(value string) tea.Cmd {
 	return func() tea.Msg {
-		return clipboardResultMsg{value: value, err: clipboard.WriteAll(value)}
+		return clipboardResultMsg{value: value, err: clipboard.WriteAll(value), osc: ansi.SetSystemClipboard(value)}
 	}
 }
 

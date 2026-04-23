@@ -22,6 +22,10 @@ func listenUDP(ctx context.Context, address string) (*net.UDPConn, error) {
 				}
 				if err := unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEPORT, 1); err != nil {
 					controlErr = err
+					return
+				}
+				if err := unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_BROADCAST, 1); err != nil {
+					controlErr = err
 				}
 			}); err != nil {
 				return err

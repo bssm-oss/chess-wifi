@@ -157,6 +157,7 @@ go build -o /tmp/chess-wifi-ui-fix ./cmd/chess-wifi
 
 - `80x24` PTY에서 match 화면이 compact layout으로 표시되어 보드와 상태 패널이 잘리지 않음
 - Host 주소 복사 후 `복사됨: <주소>` 메시지가 표시됨
+- Host 주소 복사 후 `pbpaste` 결과가 `10.0.0.6:8787` 로 확인됨
 - discovery 방 목록 클릭으로 Guest가 즉시 연결됨
 - 마우스 클릭으로 `e2e4` 수가 적용되고 Guest 화면에도 동기화됨
 - `[ Quit ]` 클릭으로 한쪽이 종료되고 상대는 `connection closed` 화면으로 전환됨
@@ -166,9 +167,34 @@ go build -o /tmp/chess-wifi-ui-fix ./cmd/chess-wifi
 ```text
 COMPACT_LAYOUT_VISIBLE=True
 COPY_MESSAGE=True
+PBPASTE=10.0.0.6:8787
 DISCOVERY_MOUSE_JOIN=True
 MOUSE_MOVE_E2E4=True
 MOUSE_QUIT=True
+```
+
+### 7. Discovery query와 OSC52 복사 fallback 확인
+
+실행 명령:
+
+```bash
+go build -o /tmp/chess-wifi-discovery-fix ./cmd/chess-wifi
+/tmp/chess-wifi-discovery-fix match
+pbpaste
+```
+
+관찰 결과:
+
+- Host 대기 후 다른 TUI에서 `Join Host · 10.129.57.46:8787` 항목이 표시됨
+- Host 주소 `[ Copy ]` 클릭 시 OSC52 sequence가 출력에 포함됨
+- `pbpaste` 결과가 `10.0.0.6:8787` 로 확인됨
+
+실행 출력 요약:
+
+```text
+DISCOVERY_QUERY_VISIBLE=True
+OSC52_SEQUENCE_VISIBLE=True
+SYSTEM_CLIPBOARD_VALUE=10.0.0.6:8787
 ```
 
 ## 해석
