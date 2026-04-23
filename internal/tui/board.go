@@ -4,7 +4,7 @@ import "github.com/bssm-oss/chess-wifi/internal/game"
 
 func (m *model) updateLayoutBounds() {
 	originX, originY := boardCellOrigin()
-	m.boardBounds = rect{x: originX, y: originY, w: cellWidth * 8, h: cellHeight * 8}
+	m.boardBounds = rect{x: originX, y: originY, w: m.cellWidth() * 8, h: m.cellHeight() * 8}
 }
 
 func (m *model) squareFromMouse(x, y int) (string, bool) {
@@ -17,8 +17,8 @@ func (m *model) squareFromMouse(x, y int) (string, bool) {
 	if relX >= m.boardBounds.w || relY >= m.boardBounds.h {
 		return "", false
 	}
-	visibleFile := relX / cellWidth
-	visibleRank := 7 - (relY / cellHeight)
+	visibleFile := relX / m.cellWidth()
+	visibleRank := 7 - (relY / m.cellHeight())
 	file := visibleFile
 	rank := visibleRank
 	if m.side() == game.Black {
@@ -42,7 +42,7 @@ func (m *model) isLegalTarget(square string) bool {
 }
 
 func (m *model) promotionFromMouse(x, y int) int {
-	startX, startY := promotionOrigin()
+	startX, startY := m.promotionOrigin()
 	if y < startY || y > startY+1 {
 		return -1
 	}
@@ -62,7 +62,7 @@ func boardCellOrigin() (int, int) {
 	return x, y
 }
 
-func promotionOrigin() (int, int) {
+func (m *model) promotionOrigin() (int, int) {
 	x, y := boardCellOrigin()
-	return x + 1, y + boardRows + 6
+	return x + 1, y + (m.cellHeight() * 8) + 6
 }
