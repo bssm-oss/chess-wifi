@@ -134,6 +134,43 @@ HOST_CONNECTED=True
 GUEST_CONNECTED=True
 ```
 
+### 6. 마우스 조작, 주소 복사, compact layout 확인
+
+실행 명령:
+
+```bash
+go build -o /tmp/chess-wifi-ui-fix ./cmd/chess-wifi
+/tmp/chess-wifi-ui-fix match
+```
+
+실행 방법:
+
+- `/tmp/chess-wifi-ui-fix match`를 PTY 두 개에서 실행
+- 첫 번째 TUI에서 마우스로 `Host a match` 클릭
+- Host 설정 화면에서 마우스로 `[ Start hosting ]` 클릭
+- Host 대기 화면에서 주소 옆 `[ Copy ]` 클릭
+- 두 번째 TUI 첫 화면에서 discovery로 표시된 `Join Host · <주소>` 항목을 마우스로 클릭
+- Host 보드에서 마우스로 `e2`를 클릭한 뒤 `e4`를 클릭
+- Guest 화면에서 `[ Quit ]` 버튼을 마우스로 클릭
+
+관찰 결과:
+
+- `80x24` PTY에서 match 화면이 compact layout으로 표시되어 보드와 상태 패널이 잘리지 않음
+- Host 주소 복사 후 `복사됨: <주소>` 메시지가 표시됨
+- discovery 방 목록 클릭으로 Guest가 즉시 연결됨
+- 마우스 클릭으로 `e2e4` 수가 적용되고 Guest 화면에도 동기화됨
+- `[ Quit ]` 클릭으로 한쪽이 종료되고 상대는 `connection closed` 화면으로 전환됨
+
+실행 출력 요약:
+
+```text
+COMPACT_LAYOUT_VISIBLE=True
+COPY_MESSAGE=True
+DISCOVERY_MOUSE_JOIN=True
+MOUSE_MOVE_E2E4=True
+MOUSE_QUIT=True
+```
+
 ## 해석
 
 - 비인터랙티브 파이프 환경에서는 Bubble Tea가 `/dev/tty` 를 요구하므로 단순 파이프 대신 PTY 기반 검증이 필요했습니다.
@@ -144,6 +181,7 @@ GUEST_CONNECTED=True
 - 실제 같은 Wi-Fi의 두 장치에서 Host/Join 검증
 - `r` 기권 결과가 양쪽 화면에 반영되는지 확인
 - 네트워크 정책이 다른 Wi-Fi/AP에서 UDP discovery `18787` 이 차단되지 않는지 확인
+- OS/터미널별 클립보드 권한 차이 확인
 
 ## 현재 한계
 
