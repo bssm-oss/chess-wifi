@@ -8,6 +8,7 @@
 
 - `internal/cli`: `chess-wifi match` 명령 정의
 - `internal/tui`: 화면 전환, 보드 렌더링, 마우스/키보드 입력
+- `internal/discovery`: Host 대기 상태를 UDP broadcast로 알리고 Join 화면에서 열린 매치를 찾음
 - `internal/session`: Host/Join 연결, heartbeat, 프로토콜 송수신
 - `internal/netproto`: JSON envelope 및 메시지 구조
 - `internal/game`: 체스 스냅샷과 이동 검증 보조 로직
@@ -16,8 +17,18 @@
 
 1. Host가 TCP 리스너를 띄움
 2. Host는 사설 IPv4 주소 목록을 UI에 표시
-3. Join은 `IP:PORT`로 직접 연결
-4. `hello` / `welcome` / `snapshot` 순서로 핸드셰이크
+3. Host는 UDP `18787` 로 discovery announcement를 주기적으로 broadcast
+4. Join 화면은 열린 매치를 스캔해서 첫 화면과 Join 화면에 표시
+5. Join은 discovery 목록에서 선택하거나 `IP:PORT`를 직접 입력해 연결
+6. `hello` / `welcome` / `snapshot` 순서로 핸드셰이크
+
+## Discovery 모델
+
+- 중앙 서버 없음
+- UDP broadcast만 사용
+- announcement에는 서비스명, discovery 프로토콜 버전, Host 이름, TCP 매치 포트만 포함
+- Join 측은 UDP 패킷의 source IP와 announcement의 TCP 포트를 조합해 접속 주소를 만듦
+- discovery가 실패해도 수동 `IP:PORT` 입력 경로는 유지
 
 ## 상태 동기화 모델
 
@@ -29,7 +40,7 @@
 ## 왜 이 구조를 택했는가
 
 - LAN 환경에서 가장 단순하고 예측 가능함
-- mDNS/브로드캐스트보다 디버깅이 쉬움
+- mDNS보다 단순한 UDP broadcast가 디버깅과 수동 fallback에 유리함
 - 체스 상태가 작아서 전체 스냅샷 비용이 낮음
 - 양쪽 보드 상태가 어긋나기 어렵고 로그 추적이 쉬움
 

@@ -105,6 +105,35 @@ GUEST_SNIP=...connection closed...
 PANIC=False
 ```
 
+### 5. Discovery 목록과 설치 스크립트 확인
+
+실행 명령:
+
+```bash
+go build -o /tmp/chess-wifi-discovery ./cmd/chess-wifi
+CHESS_WIFI_INSTALL_DIR=/tmp/chess-wifi-install-test ./install.sh
+/tmp/chess-wifi-install-test/chess-wifi --help
+```
+
+관찰 결과:
+
+- 설치 스크립트가 지정한 디렉터리에 `chess-wifi` 바이너리를 설치함
+- 설치된 바이너리의 `--help` 출력이 정상 표시됨
+- `/tmp/chess-wifi-discovery match`를 PTY 두 개에서 실행하고 한쪽을 Host 대기 상태로 만들면, 다른 쪽 첫 화면에 열린 매치가 자동 표시됨
+- discovery 목록에서 `Join Host · <주소>` 항목을 선택하면 Guest가 즉시 연결되고 Host 화면이 매치 화면으로 전환됨
+
+실행 출력 요약:
+
+```text
+INSTALL_OK=True
+HELP_OK=True
+DISCOVERY_VISIBLE=True
+DISCOVERED_ITEM=Join Host · 10.129.57.46:8787
+JOIN_FROM_DISCOVERY=True
+HOST_CONNECTED=True
+GUEST_CONNECTED=True
+```
+
 ## 해석
 
 - 비인터랙티브 파이프 환경에서는 Bubble Tea가 `/dev/tty` 를 요구하므로 단순 파이프 대신 PTY 기반 검증이 필요했습니다.
@@ -114,6 +143,7 @@ PANIC=False
 
 - 실제 같은 Wi-Fi의 두 장치에서 Host/Join 검증
 - `r` 기권 결과가 양쪽 화면에 반영되는지 확인
+- 네트워크 정책이 다른 Wi-Fi/AP에서 UDP discovery `18787` 이 차단되지 않는지 확인
 
 ## 현재 한계
 
