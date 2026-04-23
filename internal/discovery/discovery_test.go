@@ -80,6 +80,16 @@ func TestScanIgnoresInvalidAnnouncements(t *testing.T) {
 	}
 }
 
+func TestQueryPayloadIsNotParsedAsMatch(t *testing.T) {
+	query := []byte(`{"kind":"query","service":"chess-wifi","protocol_version":"1"}`)
+	if match, ok := parseAnnouncement(query, &net.UDPAddr{IP: net.ParseIP("192.168.0.2")}, time.Now()); ok {
+		t.Fatalf("expected query to be ignored, got %+v", match)
+	}
+	if !isQuery(query) {
+		t.Fatal("expected query payload to be recognized")
+	}
+}
+
 func freeUDPPort(t *testing.T) int {
 	t.Helper()
 	addr, err := net.ResolveUDPAddr("udp4", "127.0.0.1:0")
