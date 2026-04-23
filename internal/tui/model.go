@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bssm-oss/chess-wifi/internal/discovery"
 	"github.com/bssm-oss/chess-wifi/internal/game"
 	"github.com/bssm-oss/chess-wifi/internal/session"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -36,6 +37,7 @@ const (
 	rankLabelWidth  = 2
 	boardRows       = 16
 	boardFilesY     = 16
+	discoveryEvery  = 2 * time.Second
 )
 
 type hostAcceptedMsg struct {
@@ -51,6 +53,11 @@ type joinResultMsg struct {
 	err     error
 }
 type sessionEventMsg struct{ event session.Event }
+type discoveryTickMsg struct{}
+type discoveryResultMsg struct {
+	matches []discovery.Match
+	err     error
+}
 
 type promotionChoice struct {
 	Target  string
@@ -85,6 +92,9 @@ type model struct {
 	promotion    *promotionChoice
 	boardBounds  rect
 	joining      bool
+	discoveries  []discovery.Match
+	discoveryErr string
+	discoveryRun bool
 	waitingSince time.Time
 	quitting     bool
 }
@@ -108,18 +118,21 @@ func newModel() *model {
 	joinAddr.Placeholder = "호스트 주소 (예: 192.168.0.10:8787)"
 
 	return &model{
-		screen:      screenMenu,
-		hostInputs:  []textinput.Model{hostName, hostPort},
-		joinInputs:  []textinput.Model{joinName, joinAddr},
-		viewSide:    game.White,
-		cursorFile:  4,
-		cursorRank:  1,
-		boardBounds: rect{x: 0, y: 0, w: cellWidth * 8, h: cellHeight * 8},
-		message:     "같은 Wi-Fi에서 직접 연결되는 체스를 준비하세요.",
+		screen:       screenMenu,
+		hostInputs:   []textinput.Model{hostName, hostPort},
+		joinInputs:   []textinput.Model{joinName, joinAddr},
+		viewSide:     game.White,
+		cursorFile:   4,
+		cursorRank:   1,
+		boardBounds:  rect{x: 0, y: 0, w: cellWidth * 8, h: cellHeight * 8},
+		message:      "같은 Wi-Fi에서 직접 연결되는 체스를 준비하세요.",
+		discoveryRun: true,
 	}
 }
 
-func (m *model) Init() tea.Cmd { return nil }
+func (m *model) Init() tea.Cmd {
+	return tea.Batch(scanDiscoveryCmd(), discoveryTickCmd())
+}
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -163,6 +176,24 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.screen = screenMatch
 		m.message = fmt.Sprintf("Connected to %s.", msg.session.Peer().Name)
 		return m, waitForSessionEvent(msg.session)
+	case discoveryTickMsg:
+		if m.canScanDiscovery() && !m.discoveryRun {
+			m.discoveryRun = true
+			return m, tea.Batch(scanDiscoveryCmd(), discoveryTickCmd())
+		}
+		return m, discoveryTickCmd()
+	case discoveryResultMsg:
+		m.discoveryRun = false
+		if msg.err != nil {
+			m.discoveryErr = msg.err.Error()
+		} else {
+			m.discoveryErr = ""
+			m.discoveries = msg.matches
+		}
+		if m.screen == screenMenu && m.menuIndex >= m.menuChoiceCount() {
+			m.menuIndex = m.menuChoiceCount() - 1
+		}
+		return m, nil
 	case sessionEventMsg:
 		switch msg.event.Type {
 		case session.EventSnapshot:
@@ -200,16 +231,18 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.menuIndex--
 			}
 		case "down", "j":
-			if m.menuIndex < 1 {
+			if m.menuIndex < m.menuChoiceCount()-1 {
 				m.menuIndex++
 			}
 		case "enter", " ":
 			if m.menuIndex == 0 {
 				m.focusHostField(0)
 				m.screen = screenHost
-			} else {
+			} else if m.menuIndex == 1 {
 				m.focusJoinField(0)
 				m.screen = screenJoin
+			} else {
+				return m.startDiscoveredJoin(m.discoveries[m.menuIndex-2])
 			}
 		case "q", "ctrl+c":
 			m.quitting = true
@@ -275,6 +308,14 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
+}
+
+func (m *model) menuChoiceCount() int {
+	return 2 + len(m.discoveries)
+}
+
+func (m *model) canScanDiscovery() bool {
+	return m.listener == nil && m.peerSession == nil && !m.joining && (m.screen == screenMenu || m.screen == screenJoin || m.screen == screenError)
 }
 
 func (m *model) side() game.Side {
@@ -456,6 +497,17 @@ func (m *model) startJoin() (tea.Model, tea.Cmd) {
 	return m, joinCmd(name, addr)
 }
 
+func (m *model) startDiscoveredJoin(match discovery.Match) (tea.Model, tea.Cmd) {
+	m.joinInputs[1].SetValue(match.Address)
+	name := strings.TrimSpace(m.joinInputs[0].Value())
+	if name == "" {
+		name = "Guest"
+	}
+	m.joining = true
+	m.message = fmt.Sprintf("Connecting to %s at %s...", match.PlayerName, match.Address)
+	return m, joinCmd(name, match.Address)
+}
+
 func (m *model) submitMove(uci string) tea.Cmd {
 	return func() tea.Msg {
 		if m.peerSession == nil {
@@ -500,6 +552,21 @@ func waitForSessionEvent(peer *session.PeerSession) tea.Cmd {
 			return sessionEventMsg{event: session.Event{Type: session.EventClosed, Snapshot: peer.Snapshot(), Message: "connection closed"}}
 		}
 		return sessionEventMsg{event: event}
+	}
+}
+
+func discoveryTickCmd() tea.Cmd {
+	return tea.Tick(discoveryEvery, func(time.Time) tea.Msg {
+		return discoveryTickMsg{}
+	})
+}
+
+func scanDiscoveryCmd() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+		defer cancel()
+		matches, err := discovery.ScanWithOptions(ctx, discovery.ScanOptions{Timeout: 1200 * time.Millisecond})
+		return discoveryResultMsg{matches: matches, err: err}
 	}
 }
 

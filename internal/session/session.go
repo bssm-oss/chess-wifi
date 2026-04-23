@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bssm-oss/chess-wifi/internal/discovery"
 	"github.com/bssm-oss/chess-wifi/internal/game"
 	"github.com/bssm-oss/chess-wifi/internal/lan"
 	"github.com/bssm-oss/chess-wifi/internal/netproto"
@@ -23,11 +24,12 @@ const (
 )
 
 type HostListener struct {
-	listener  net.Listener
-	Addresses []string
-	accepted  chan *PeerSession
-	errs      chan error
-	closeOnce sync.Once
+	listener     net.Listener
+	Addresses    []string
+	accepted     chan *PeerSession
+	errs         chan error
+	closeOnce    sync.Once
+	stopAnnounce func()
 }
 
 func StartHost(name string, port int) (*HostListener, error) {
@@ -46,6 +48,9 @@ func StartHost(name string, port int) (*HostListener, error) {
 		accepted:  make(chan *PeerSession, 1),
 		errs:      make(chan error, 1),
 	}
+	if stopAnnounce, err := discovery.StartAnnouncer(context.Background(), name, port); err == nil {
+		h.stopAnnounce = stopAnnounce
+	}
 	go h.acceptLoop(name)
 	return h, nil
 }
@@ -56,6 +61,9 @@ func (h *HostListener) Errors() <-chan error          { return h.errs }
 func (h *HostListener) Close() error {
 	var err error
 	h.closeOnce.Do(func() {
+		if h.stopAnnounce != nil {
+			h.stopAnnounce()
+		}
 		err = h.listener.Close()
 	})
 	return err
