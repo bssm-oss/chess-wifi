@@ -18,15 +18,18 @@
 1. Host가 TCP 리스너를 띄움
 2. Host는 사설 IPv4 주소 목록을 UI에 표시
 3. Host는 UDP `18787` 로 discovery announcement를 주기적으로 broadcast
-4. Join 화면은 열린 매치를 스캔해서 첫 화면과 Join 화면에 표시
-5. Join은 discovery 목록에서 선택하거나 `IP:PORT`를 직접 입력해 연결
-6. `hello` / `welcome` / `snapshot` 순서로 핸드셰이크
+4. Join 화면은 UDP `18787` 로 discovery query를 broadcast해 열린 Host가 즉시 응답하게 함
+5. Join 화면은 열린 매치를 스캔해서 첫 화면과 Join 화면에 표시
+6. Join은 discovery 목록에서 선택하거나 `IP:PORT`를 직접 입력해 연결
+7. `hello` / `welcome` / `snapshot` 순서로 핸드셰이크
 
 ## Discovery 모델
 
 - 중앙 서버 없음
 - UDP broadcast만 사용
 - announcement에는 서비스명, discovery 프로토콜 버전, Host 이름, TCP 매치 포트만 포함
+- query에는 서비스명과 discovery 프로토콜 버전만 포함
+- Host는 query를 받으면 현재 announcement를 unicast로 즉시 응답
 - Join 측은 UDP 패킷의 source IP와 announcement의 TCP 포트를 조합해 접속 주소를 만듦
 - discovery가 실패해도 수동 `IP:PORT` 입력 경로는 유지
 

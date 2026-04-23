@@ -15,6 +15,7 @@
 - 같은 Wi-Fi에서 직접 TCP 연결
 - Host가 자신의 LAN 주소를 표시하고 Join이 직접 접속
 - Host 대기 중 UDP LAN discovery로 열린 매치를 자동 표시
+- Join이 켜질 때 discovery query를 보내 열려있는 Host를 즉시 다시 요청
 - Bubble Tea 기반 TUI
 - 메뉴, 방 목록, 주소 복사, 체스판 이동, 기권/종료를 마우스 클릭으로 조작
 - 작은 터미널에서는 체스판을 compact layout으로 자동 전환
@@ -118,7 +119,7 @@ chess-wifi match
 3. Host 화면에 표시된 `IP:PORT` 입력
 4. 연결되면 체스판이 열림
 
-자동 목록은 UDP broadcast를 사용합니다. 학교/회사 Wi-Fi, 게스트 네트워크, 방화벽, AP isolation 설정이 UDP `18787`을 막으면 목록에 안 뜰 수 있습니다. 이 경우에도 직접 주소 입력은 계속 사용할 수 있습니다.
+자동 목록은 UDP broadcast와 discovery query를 사용합니다. Host는 주기적으로 방을 알리고, Join은 켜질 때 같은 Wi-Fi에 query를 보내 열린 방을 즉시 다시 요청합니다. 학교/회사 Wi-Fi, 게스트 네트워크, 방화벽, AP isolation 설정이 UDP `18787`을 막으면 목록에 안 뜰 수 있습니다. 이 경우에도 직접 주소 입력은 계속 사용할 수 있습니다.
 
 ## 조작 방법
 
@@ -129,6 +130,7 @@ chess-wifi match
 - `r`: 기권
 - `q`: 프로그램 종료
 - Host 대기 화면에서 `c`: 첫 번째 Host 주소 복사
+- 주소 복사는 시스템 클립보드와 터미널 OSC52를 같이 시도합니다.
 
 ## 화면 크기
 
