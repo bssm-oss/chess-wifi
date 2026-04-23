@@ -13,19 +13,21 @@ func (m *model) View() string {
 	if m.quitting {
 		return ""
 	}
+	prefix := m.clipboardOSC
+	m.clipboardOSC = ""
 	switch m.screen {
 	case screenMenu:
-		return m.renderFrame("chess-wifi match", m.renderMenu())
+		return prefix + m.renderFrame("chess-wifi match", m.renderMenu())
 	case screenHost:
-		return m.renderFrame("호스트 설정", m.renderHostForm())
+		return prefix + m.renderFrame("호스트 설정", m.renderHostForm())
 	case screenJoin:
-		return m.renderFrame("참가 설정", m.renderJoinForm())
+		return prefix + m.renderFrame("참가 설정", m.renderJoinForm())
 	case screenWaiting:
-		return m.renderFrame("상대 연결 대기 중", m.renderWaiting())
+		return prefix + m.renderFrame("상대 연결 대기 중", m.renderWaiting())
 	case screenMatch:
-		return m.renderFrame("LAN Match", m.renderMatch())
+		return prefix + m.renderFrame("LAN Match", m.renderMatch())
 	case screenError:
-		return m.renderFrame("상태 알림", m.renderError())
+		return prefix + m.renderFrame("상태 알림", m.renderError())
 	default:
 		return ""
 	}

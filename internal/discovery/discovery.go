@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"strconv"
 	"time"
 )
 
@@ -14,12 +15,15 @@ const (
 	DefaultPort     = 18787
 	ServiceName     = "chess-wifi"
 	ProtocolVersion = "1"
+	KindAnnounce    = "announce"
+	KindQuery       = "query"
 
 	defaultInterval = 1 * time.Second
 	defaultTimeout  = 1200 * time.Millisecond
 )
 
 type Announcement struct {
+	Kind            string `json:"kind,omitempty"`
 	Service         string `json:"service"`
 	ProtocolVersion string `json:"protocol_version"`
 	PlayerName      string `json:"player_name"`
@@ -68,15 +72,14 @@ func StartAnnouncerWithOptions(ctx context.Context, playerName string, matchPort
 		playerName = "Host"
 	}
 
-	conn, err := net.ListenPacket("udp4", ":0")
+	conn, err := listenUDP(ctx, fmt.Sprintf(":%d", port))
 	if err != nil {
 		return nil, fmt.Errorf("start discovery announcer: %w", err)
 	}
-	if udpConn, ok := conn.(*net.UDPConn); ok {
-		_ = udpConn.SetWriteBuffer(2048)
-	}
+	_ = conn.SetWriteBuffer(2048)
 	childCtx, cancel := context.WithCancel(ctx)
 	announcement := Announcement{
+		Kind:            KindAnnounce,
 		Service:         ServiceName,
 		ProtocolVersion: ProtocolVersion,
 		PlayerName:      playerName,
@@ -100,12 +103,19 @@ func StartAnnouncerWithOptions(ctx context.Context, playerName string, matchPort
 		sendAnnouncement(conn, addresses, payload)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
+		buf := make([]byte, 2048)
 		for {
+			_ = conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+			n, remote, err := conn.ReadFromUDP(buf)
+			if err == nil && isQuery(buf[:n]) {
+				_, _ = conn.WriteToUDP(payload, remote)
+			}
 			select {
 			case <-childCtx.Done():
 				return
 			case <-ticker.C:
 				sendAnnouncement(conn, addresses, payload)
+			default:
 			}
 		}
 	}()
@@ -140,6 +150,13 @@ func ScanWithOptions(ctx context.Context, opts ScanOptions) ([]Match, error) {
 	if err := conn.SetReadDeadline(deadline); err != nil {
 		return nil, fmt.Errorf("set discovery deadline: %w", err)
 	}
+	port := DefaultPort
+	if _, rawPort, err := net.SplitHostPort(listenAddress); err == nil {
+		if parsed, parseErr := strconv.Atoi(rawPort); parseErr == nil && parsed > 0 {
+			port = parsed
+		}
+	}
+	sendQuery(conn, defaultDestinations(port))
 	matches := map[string]Match{}
 	buf := make([]byte, 2048)
 	for {
@@ -168,6 +185,9 @@ func parseAnnouncement(payload []byte, remote *net.UDPAddr, seen time.Time) (Mat
 	if err := json.Unmarshal(payload, &announcement); err != nil {
 		return Match{}, false
 	}
+	if announcement.Kind == KindQuery {
+		return Match{}, false
+	}
 	if announcement.Service != ServiceName || announcement.ProtocolVersion != ProtocolVersion || announcement.MatchPort <= 0 || announcement.MatchPort > 65535 {
 		return Match{}, false
 	}
@@ -189,8 +209,34 @@ func parseAnnouncement(payload []byte, remote *net.UDPAddr, seen time.Time) (Mat
 	}, true
 }
 
+func isQuery(payload []byte) bool {
+	var announcement Announcement
+	if err := json.Unmarshal(payload, &announcement); err != nil {
+		return false
+	}
+	return announcement.Kind == KindQuery && announcement.Service == ServiceName && announcement.ProtocolVersion == ProtocolVersion
+}
+
+func sendQuery(conn *net.UDPConn, destinations []string) {
+	payload, err := json.Marshal(Announcement{
+		Kind:            KindQuery,
+		Service:         ServiceName,
+		ProtocolVersion: ProtocolVersion,
+	})
+	if err != nil {
+		return
+	}
+	addresses, err := resolveDestinations(destinations)
+	if err != nil {
+		return
+	}
+	sendAnnouncement(conn, addresses, payload)
+}
+
 func defaultDestinations(port int) []string {
-	destinations := []string{fmt.Sprintf("255.255.255.255:%d", port)}
+	destinations := []string{
+		fmt.Sprintf("255.255.255.255:%d", port),
+	}
 	for _, addr := range interfaceBroadcasts(port) {
 		destinations = append(destinations, addr)
 	}
