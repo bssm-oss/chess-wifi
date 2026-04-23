@@ -44,6 +44,8 @@ func (m *model) renderMenu() string {
 	for _, match := range m.discoveries {
 		choices = append(choices, fmt.Sprintf("Join %s · %s", match.PlayerName, match.Address))
 	}
+	m.menuBounds = make([]rect, len(choices))
+	menuX, menuY := panelContentOrigin()
 	var lines []string
 	for i, choice := range choices {
 		prefix := "  "
@@ -52,9 +54,10 @@ func (m *model) renderMenu() string {
 			prefix = "▸ "
 			style = menuActiveStyle
 		}
+		m.menuBounds[i] = rect{x: menuX, y: menuY + i, w: max(24, len(choice)+4), h: 1}
 		lines = append(lines, style.Render(prefix+choice))
 	}
-	help := subtleStyle.Render("↑/↓ 선택 · Enter 실행 · q 종료")
+	help := subtleStyle.Render("마우스 클릭 / ↑↓ 선택 · Enter 실행 · q 종료")
 	return lipgloss.JoinVertical(lipgloss.Left,
 		panelStyle.Render(strings.Join(lines, "\n")),
 		"",
@@ -65,6 +68,13 @@ func (m *model) renderMenu() string {
 }
 
 func (m *model) renderHostForm() string {
+	x, y := panelContentOrigin()
+	m.hostInputBounds = []rect{
+		{x: x, y: y + 2, w: 24, h: 3},
+		{x: x, y: y + 7, w: 18, h: 3},
+	}
+	m.hostStartBounds = rect{x: x, y: y + 12, w: 17, h: 1}
+	m.hostBackBounds = rect{x: x + 19, y: y + 12, w: 9, h: 1}
 	body := []string{
 		labelStyle.Render("이름"),
 		inputStyle.Render(m.hostInputs[0].View()),
@@ -72,12 +82,20 @@ func (m *model) renderHostForm() string {
 		labelStyle.Render("포트"),
 		inputStyle.Render(m.hostInputs[1].View()),
 		"",
-		subtleStyle.Render("Tab으로 이동 · 마지막 필드에서 Enter로 시작 · Esc 뒤로"),
+		buttonStyle.Render("[ Start hosting ]") + " " + buttonStyle.Render("[ Back ]"),
+		subtleStyle.Render("필드/버튼 클릭 가능 · Tab 이동 · Enter 시작 · Esc 뒤로"),
 	}
 	return panelStyle.Render(strings.Join(body, "\n"))
 }
 
 func (m *model) renderJoinForm() string {
+	x, y := panelContentOrigin()
+	m.joinInputBounds = []rect{
+		{x: x, y: y + 2, w: 24, h: 3},
+		{x: x, y: y + 7, w: 34, h: 3},
+	}
+	m.joinConnectBounds = rect{x: x, y: y + 12, w: 11, h: 1}
+	m.joinBackBounds = rect{x: x + 13, y: y + 12, w: 9, h: 1}
 	body := []string{
 		labelStyle.Render("이름"),
 		inputStyle.Render(m.joinInputs[0].View()),
@@ -85,7 +103,8 @@ func (m *model) renderJoinForm() string {
 		labelStyle.Render("호스트 주소"),
 		inputStyle.Render(m.joinInputs[1].View()),
 		"",
-		subtleStyle.Render("예: 192.168.0.12:8787 · Tab 이동 · Enter 연결"),
+		buttonStyle.Render("[ Connect ]") + " " + buttonStyle.Render("[ Back ]"),
+		subtleStyle.Render("방 목록/필드/버튼 클릭 가능 · 예: 192.168.0.12:8787"),
 	}
 	if m.joining {
 		body = append(body, "", accentStyle.Render("연결 중..."))
@@ -99,9 +118,20 @@ func (m *model) renderJoinForm() string {
 
 func (m *model) renderDiscoverySummary() string {
 	lines := []string{labelStyle.Render("열려있는 LAN 매치")}
+	x, y := panelContentOrigin()
+	switch m.screen {
+	case screenMenu:
+		y += len(m.menuBounds) + 5
+	case screenJoin:
+		y += 17
+	default:
+		y += 5
+	}
+	m.discoveryBounds = nil
 	if len(m.discoveries) > 0 {
 		for i, match := range m.discoveries {
 			line := fmt.Sprintf("%d. %s · %s · %s 전", i+1, match.PlayerName, match.Address, timeSince(match.LastSeen))
+			m.discoveryBounds = append(m.discoveryBounds, rect{x: x, y: y + 1 + i, w: max(44, len(line)+4), h: 1})
 			if m.screen == screenMenu && m.menuIndex == i+2 {
 				lines = append(lines, menuActiveStyle.Render("▸ "+line))
 			} else {
@@ -124,13 +154,21 @@ func (m *model) renderDiscoverySummary() string {
 
 func (m *model) renderWaiting() string {
 	addresses := []string{subtleStyle.Render("호스트 주소를 아직 확인하지 못했습니다.")}
+	m.waitingAddressBounds = nil
+	m.waitingCopyBounds = nil
+	m.waitingCancelBounds = rect{}
+	x, y := panelContentOrigin()
 	if m.listener != nil && len(m.listener.Addresses) > 0 {
 		addresses = nil
-		for _, addr := range m.listener.Addresses {
-			addresses = append(addresses, accentStyle.Render(addr))
+		for i, addr := range m.listener.Addresses {
+			rowY := y + 2 + i
+			m.waitingAddressBounds = append(m.waitingAddressBounds, rect{x: x, y: rowY, w: len(addr), h: 1})
+			m.waitingCopyBounds = append(m.waitingCopyBounds, rect{x: x + len(addr) + 2, y: rowY, w: 10, h: 1})
+			addresses = append(addresses, accentStyle.Render(addr)+" "+buttonStyle.Render("[ Copy ]"))
 		}
 	}
 	waited := subtleStyle.Render(fmt.Sprintf("대기 시간: %s", timeSince(m.waitingSince)))
+	m.waitingCancelBounds = rect{x: x, y: y + 4 + len(addresses), w: 10, h: 1}
 	body := append([]string{
 		labelStyle.Render("같은 Wi-Fi의 상대에게 아래 주소를 공유하세요."),
 		"",
@@ -138,7 +176,8 @@ func (m *model) renderWaiting() string {
 	body = append(body,
 		"",
 		waited,
-		subtleStyle.Render("상대가 연결되면 자동으로 보드로 전환됩니다. Esc 취소"),
+		buttonStyle.Render("[ Cancel ]"),
+		subtleStyle.Render("주소나 Copy 클릭으로 복사 · c 첫 주소 복사 · Esc 취소"),
 	)
 	return panelStyle.Render(strings.Join(body, "\n"))
 }
@@ -154,7 +193,11 @@ func (m *model) renderError() string {
 func (m *model) renderMatch() string {
 	board := m.renderBoard()
 	sidebar := m.renderSidebar()
-	content := lipgloss.JoinHorizontal(lipgloss.Top, board, "  ", sidebar)
+	gap := "  "
+	if m.compactLayout() {
+		gap = " "
+	}
+	content := lipgloss.JoinHorizontal(lipgloss.Top, board, gap, sidebar)
 	if m.promotion != nil {
 		content = lipgloss.JoinVertical(lipgloss.Left, content, "", m.renderPromotion())
 	}
@@ -165,6 +208,7 @@ func (m *model) renderBoard() string {
 	m.updateLayoutBounds()
 	perspective := m.side()
 	var lines []string
+	cw := m.cellWidth()
 	for vrank := 7; vrank >= 0; vrank-- {
 		worldRank := vrank
 		if perspective == game.Black {
@@ -183,8 +227,12 @@ func (m *model) renderBoard() string {
 			top = append(top, cellTop)
 			bottom = append(bottom, cellBottom)
 		}
-		lines = append(lines, label+strings.Join(top, ""))
-		lines = append(lines, lipgloss.NewStyle().Width(2).Render(" ")+strings.Join(bottom, ""))
+		if m.compactLayout() {
+			lines = append(lines, label+strings.Join(bottom, ""))
+		} else {
+			lines = append(lines, label+strings.Join(top, ""))
+			lines = append(lines, lipgloss.NewStyle().Width(2).Render(" ")+strings.Join(bottom, ""))
+		}
 	}
 	var files []string
 	for vfile := 0; vfile < 8; vfile++ {
@@ -192,7 +240,7 @@ func (m *model) renderBoard() string {
 		if perspective == game.Black {
 			fileRune = rune('a' + (7 - vfile))
 		}
-		files = append(files, lipgloss.NewStyle().Width(cellWidth).Align(lipgloss.Center).Foreground(colorMuted).Render(string(fileRune)))
+		files = append(files, lipgloss.NewStyle().Width(cw).Align(lipgloss.Center).Foreground(colorMuted).Render(string(fileRune)))
 	}
 	lines = append(lines, lipgloss.NewStyle().Width(2).Render(" ")+strings.Join(files, ""))
 	boardBlock := strings.Join(lines, "\n")
@@ -226,12 +274,15 @@ func (m *model) renderSquare(square string, file, rank int) (string, string) {
 	if cur, _ := game.ParseSquareName(m.cursorFile, m.cursorRank); cur == square {
 		base = base.BorderForeground(colorAccent)
 	}
-	top := base.Copy().Width(cellWidth).Height(1).Render(" ")
-	bottom := base.Copy().Width(cellWidth).Height(1).Align(lipgloss.Center).Render(piece)
+	top := base.Copy().Width(m.cellWidth()).Height(1).Render(" ")
+	bottom := base.Copy().Width(m.cellWidth()).Height(1).Align(lipgloss.Center).Render(piece)
 	return top, bottom
 }
 
 func (m *model) renderSidebar() string {
+	if m.compactLayout() {
+		return m.renderCompactSidebar()
+	}
 	role := string(m.side())
 	peer := "—"
 	if m.peerSession != nil {
@@ -260,11 +311,41 @@ func (m *model) renderSidebar() string {
 		labelStyle.Render("State") + "\n" + infoStyle.Render(m.snapshot.Status),
 		labelStyle.Render("Result") + "\n" + infoStyle.Render(orDash(m.snapshot.Result)),
 		labelStyle.Render("Recent moves") + "\n" + subtleStyle.Width(28).Render(lastMoves),
-		labelStyle.Render("Controls") + "\n" + subtleStyle.Render("Mouse click to move\nArrow / hjkl cursor\nEnter/Space select\nr resign · q quit"),
+		labelStyle.Render("Controls") + "\n" + subtleStyle.Render("Mouse click to move\nArrow / hjkl cursor\nEnter/Space select") + "\n" + buttonStyle.Render("[ Resign ]") + " " + buttonStyle.Render("[ Quit ]"),
 		labelStyle.Render("Message") + "\n" + infoStyle.Width(28).Render(m.message),
 		labelStyle.Render("Perspective") + "\n" + infoStyle.Render(role),
 	}
+	m.updateMatchButtonBounds(false)
 	return panelStyle.Width(34).Render(strings.Join(sections, "\n\n"))
+}
+
+func (m *model) renderCompactSidebar() string {
+	role := string(m.side())
+	self := "—"
+	peer := "—"
+	if m.peerSession != nil {
+		self = fmt.Sprintf("%s (%s)", m.peerSession.Self().Name, m.peerSession.Self().Side)
+		peer = fmt.Sprintf("%s (%s)", m.peerSession.Peer().Name, m.peerSession.Peer().Side)
+	}
+	lastMoves := "Opening"
+	if len(m.snapshot.MoveHistory) > 0 {
+		start := len(m.snapshot.MoveHistory) - 4
+		if start < 0 {
+			start = 0
+		}
+		lastMoves = strings.Join(m.snapshot.MoveHistory[start:], " ")
+	}
+	lines := []string{
+		labelStyle.Render("You ") + infoStyle.Render(self),
+		labelStyle.Render("Peer ") + infoStyle.Render(peer),
+		labelStyle.Render("Turn ") + accentStyle.Render(string(m.snapshot.Turn)) + "  " + labelStyle.Render("State ") + infoStyle.Render(m.snapshot.Status),
+		labelStyle.Render("Moves ") + subtleStyle.Width(28).Render(lastMoves),
+		labelStyle.Render("Msg ") + infoStyle.Width(28).Render(m.message),
+		labelStyle.Render("View ") + infoStyle.Render(role),
+		buttonStyle.Render("[ Resign ]") + " " + buttonStyle.Render("[ Quit ]"),
+	}
+	m.updateMatchButtonBounds(true)
+	return panelStyle.Width(34).Render(strings.Join(lines, "\n"))
 }
 
 func (m *model) renderPromotion() string {
@@ -309,8 +390,36 @@ func timeSince(ts time.Time) string {
 	return time.Since(ts).Round(time.Second).String()
 }
 
+func panelContentOrigin() (int, int) {
+	return framePaddingX + panelBorderSize + panelPaddingX, framePaddingY + headerHeight + panelBorderSize + panelPaddingY
+}
+
+func (m *model) updateMatchButtonBounds(compact bool) {
+	boardPanelWidth := panelBorderSize*2 + panelPaddingX*2 + rankLabelWidth + m.cellWidth()*8
+	gap := 2
+	if compact {
+		gap = 1
+	}
+	x := framePaddingX + boardPanelWidth + gap + panelBorderSize + panelPaddingX
+	y := framePaddingY + headerHeight + panelBorderSize + panelPaddingY
+	if compact {
+		y += 6
+	} else {
+		y += 18
+	}
+	m.matchResignBounds = rect{x: x, y: y, w: 10, h: 1}
+	m.matchQuitBounds = rect{x: x + 11, y: y, w: 8, h: 1}
+}
+
 func min(a, b int) int {
 	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b int) int {
+	if a > b {
 		return a
 	}
 	return b

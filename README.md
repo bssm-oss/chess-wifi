@@ -16,7 +16,8 @@
 - Host가 자신의 LAN 주소를 표시하고 Join이 직접 접속
 - Host 대기 중 UDP LAN discovery로 열린 매치를 자동 표시
 - Bubble Tea 기반 TUI
-- 마우스 클릭과 키보드 둘 다 지원
+- 메뉴, 방 목록, 주소 복사, 체스판 이동, 기권/종료를 마우스 클릭으로 조작
+- 작은 터미널에서는 체스판을 compact layout으로 자동 전환
 - 체스 규칙은 `github.com/notnil/chess`로 검증
 - 호스트 권위(authoritative host) 스냅샷 동기화로 양쪽 보드 일관성 유지
 
@@ -83,8 +84,9 @@ chess-wifi match
 1. `Host a match` 선택
 2. 이름과 포트 입력
 3. 화면에 표시된 `192.168.x.x:8787` 같은 주소를 확인
-4. 상대가 자동 discovery 목록에서 선택할 때까지 대기
-5. 자동 discovery가 안 되면 표시된 주소를 상대에게 직접 전달
+4. 주소 옆 `[ Copy ]`를 클릭하거나 `c`를 눌러 첫 주소 복사
+5. 상대가 자동 discovery 목록에서 선택할 때까지 대기
+6. 자동 discovery가 안 되면 복사한 주소를 상대에게 직접 전달
 
 Host가 대기 중이면 다른 사용자의 첫 화면에 아래와 같은 항목이 자동으로 나타납니다.
 
@@ -120,12 +122,17 @@ chess-wifi match
 
 ## 조작 방법
 
-- 마우스 왼쪽 클릭: 말 선택 / 이동
+- 마우스 왼쪽 클릭: 메뉴 선택, 방 참가, 입력 필드 포커스, Host 시작, 주소 복사, 말 선택 / 이동, 기권, 종료
 - 방향키 또는 `h j k l`: 커서 이동
 - `Enter` / `Space`: 선택 / 이동 확정
 - `Esc`: 현재 선택 취소
 - `r`: 기권
 - `q`: 프로그램 종료
+- Host 대기 화면에서 `c`: 첫 번째 Host 주소 복사
+
+## 화면 크기
+
+기본 터미널 크기인 `80x24`에서도 보드가 잘리지 않도록, 화면이 좁거나 낮으면 자동으로 compact layout을 사용합니다. 넓은 터미널에서는 기존처럼 더 큰 보드와 상세 사이드바가 표시됩니다.
 
 ## 테스트 실행 방법
 
@@ -149,6 +156,23 @@ CHESS_WIFI_INSTALL_DIR=/tmp/chess-wifi-install-test ./install.sh
 ## 검증된 사용자 플로우
 
 이번 릴리스 흐름에서 실제로 확인한 동작입니다.
+
+```text
+1. /tmp/chess-wifi-discovery match 를 PTY 두 개에서 실행
+2. 첫 번째 TUI에서 마우스로 Host a match 선택
+3. 마우스로 Start hosting 클릭
+4. Host 대기 화면에서 주소 옆 Copy 클릭
+5. 두 번째 TUI 첫 화면에 Join Host · 10.129.57.46:8787 표시 확인
+6. discovery 목록을 마우스로 클릭
+7. Guest 화면: Connected to Host.
+8. Host 화면: Guest connected. White moves first.
+9. Host 보드에서 마우스로 e2 선택 후 e4 클릭
+10. 양쪽 화면에 e2e4와 Black to move 표시
+11. Guest에서 Quit 버튼 클릭
+12. Host 화면: connection closed
+```
+
+이전 검증 흐름:
 
 ```text
 1. /tmp/chess-wifi-discovery match 를 PTY 두 개에서 실행
