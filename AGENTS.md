@@ -11,6 +11,7 @@ go mod tidy
 go test ./...
 go build ./...
 go run ./cmd/chess-wifi match
+CHESS_WIFI_INSTALL_DIR=/tmp/chess-wifi-bin ./install.sh
 ```
 
 ## 설치 / 실행 / 테스트 명령
@@ -19,7 +20,9 @@ go run ./cmd/chess-wifi match
 - 테스트: `go test ./...`
 - 빌드: `go build ./...`
 - 실행: `go run ./cmd/chess-wifi match`
-- 설치형 사용: `go install github.com/bssm-oss/chess-wifi/cmd/chess-wifi@latest`
+- 설치 스크립트 검증: `CHESS_WIFI_INSTALL_DIR=/tmp/chess-wifi-bin ./install.sh`
+- 설치형 사용: `curl -fsSL https://raw.githubusercontent.com/bssm-oss/chess-wifi/main/install.sh | sh`
+- Go 직접 설치: `go install github.com/bssm-oss/chess-wifi/cmd/chess-wifi@latest`
 
 ## 기본 작업 순서
 
@@ -43,12 +46,14 @@ go run ./cmd/chess-wifi match
 - UI, 세션, 게임 규칙을 섞지 않습니다.
 - 숨은 전역 상태보다 명시적 구조를 선호합니다.
 - 네트워크 프로토콜은 버전 필드를 유지합니다.
+- discovery 프로토콜도 버전 필드를 유지하고 중앙 서버를 추가하지 않습니다.
 - 랜덤한 리팩터링 대신 범위에 맞는 최소 수정만 합니다.
 
 ## 파일 구조 원칙
 
 - `cmd/`에는 CLI 엔트리포인트만 둡니다.
 - `internal/cli`는 Cobra 명령 정의만 담당합니다.
+- `internal/discovery`는 UDP LAN discovery만 담당합니다.
 - `internal/game`은 체스 상태/규칙 관련 보조 로직을 가집니다.
 - `internal/session`은 TCP 세션과 동기화를 담당합니다.
 - `internal/tui`는 Bubble Tea 렌더링과 입력을 담당합니다.
@@ -75,6 +80,7 @@ go run ./cmd/chess-wifi match
 ## 민감한 경로 / 주의 경로
 
 - `internal/session/`: 프로토콜 호환성에 영향이 큽니다.
+- `internal/discovery/`: LAN 자동 발견과 UDP 포트 `18787` 동작에 영향이 큽니다.
 - `internal/game/`: 합법 수 판정과 스냅샷 구조에 영향이 큽니다.
 - `internal/tui/`: 마우스 좌표 매핑이 쉽게 깨질 수 있습니다.
 
@@ -96,5 +102,6 @@ go run ./cmd/chess-wifi match
 - 실행하지 않은 테스트를 통과했다고 말하지 않기
 - 문서와 실제 동작을 다르게 두기
 - 중앙 서버나 외부 인프라를 몰래 추가하기
+- discovery를 이유로 인터넷 릴레이, 계정, 외부 API를 추가하기
 - 타입/에러를 무시하는 임시 처리 남기기
 - 사용자 요청과 무관한 기능 확장하기

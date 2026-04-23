@@ -40,7 +40,10 @@ func (m *model) renderFrame(title, body string) string {
 }
 
 func (m *model) renderMenu() string {
-	choices := []string{"Host a match", "Join a match"}
+	choices := []string{"Host a match", "Join by address"}
+	for _, match := range m.discoveries {
+		choices = append(choices, fmt.Sprintf("Join %s · %s", match.PlayerName, match.Address))
+	}
 	var lines []string
 	for i, choice := range choices {
 		prefix := "  "
@@ -54,6 +57,8 @@ func (m *model) renderMenu() string {
 	help := subtleStyle.Render("↑/↓ 선택 · Enter 실행 · q 종료")
 	return lipgloss.JoinVertical(lipgloss.Left,
 		panelStyle.Render(strings.Join(lines, "\n")),
+		"",
+		m.renderDiscoverySummary(),
 		"",
 		help,
 	)
@@ -85,7 +90,36 @@ func (m *model) renderJoinForm() string {
 	if m.joining {
 		body = append(body, "", accentStyle.Render("연결 중..."))
 	}
-	return panelStyle.Render(strings.Join(body, "\n"))
+	return lipgloss.JoinVertical(lipgloss.Left,
+		panelStyle.Render(strings.Join(body, "\n")),
+		"",
+		m.renderDiscoverySummary(),
+	)
+}
+
+func (m *model) renderDiscoverySummary() string {
+	lines := []string{labelStyle.Render("열려있는 LAN 매치")}
+	if len(m.discoveries) > 0 {
+		for i, match := range m.discoveries {
+			line := fmt.Sprintf("%d. %s · %s · %s 전", i+1, match.PlayerName, match.Address, timeSince(match.LastSeen))
+			if m.screen == screenMenu && m.menuIndex == i+2 {
+				lines = append(lines, menuActiveStyle.Render("▸ "+line))
+			} else {
+				lines = append(lines, infoStyle.Render("  "+line))
+			}
+		}
+		if m.discoveryRun {
+			lines = append(lines, subtleStyle.Render("검색 중..."))
+		}
+		lines = append(lines, subtleStyle.Render("목록에서 Enter를 누르면 바로 연결합니다."))
+	} else if m.discoveryRun {
+		lines = append(lines, subtleStyle.Render("검색 중..."))
+	} else if m.discoveryErr != "" {
+		lines = append(lines, dangerStyle.Render(m.discoveryErr))
+	} else {
+		lines = append(lines, subtleStyle.Render("아직 발견된 매치가 없습니다. Host가 대기 중이면 자동으로 나타납니다."))
+	}
+	return panelStyle.Width(64).Render(strings.Join(lines, "\n"))
 }
 
 func (m *model) renderWaiting() string {
