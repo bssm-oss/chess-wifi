@@ -14,6 +14,7 @@
 - `chess-wifi match` 인터랙티브 실행
 - 같은 Wi-Fi에서 직접 TCP 연결
 - Host가 자신의 LAN 주소를 표시하고 Join이 직접 접속
+- Host 대기 중 UDP LAN discovery로 열린 매치를 자동 표시
 - Bubble Tea 기반 TUI
 - 마우스 클릭과 키보드 둘 다 지원
 - 체스 규칙은 `github.com/notnil/chess`로 검증
@@ -37,16 +38,22 @@
 
 ## 가장 쉬운 설치 방법
 
-릴리스가 배포된 뒤에는 아래 명령 하나로 바로 설치할 수 있습니다.
+PATH 설정 없이 바로 `chess-wifi` 명령을 쓰고 싶다면 설치 스크립트를 사용합니다. 기본 설치 위치는 `/usr/local/bin/chess-wifi` 입니다.
 
 ```bash
-go install github.com/bssm-oss/chess-wifi/cmd/chess-wifi@latest
+curl -fsSL https://raw.githubusercontent.com/bssm-oss/chess-wifi/main/install.sh | sh
 ```
 
-설치 후 실행 파일 경로가 `PATH`에 잡혀 있으면 바로 아래처럼 실행할 수 있습니다.
+설치 후 바로 실행합니다.
 
 ```bash
 chess-wifi match
+```
+
+Go 기본 설치 방식을 선호한다면 아래 명령도 사용할 수 있습니다. 이 경우 Go의 `GOBIN` 또는 `GOPATH/bin`이 `PATH`에 있어야 합니다.
+
+```bash
+go install github.com/bssm-oss/chess-wifi/cmd/chess-wifi@latest
 ```
 
 ## 로컬 개발 설치
@@ -68,7 +75,7 @@ chess-wifi match
 
 1. `Host a match` 선택
 2. 이름과 포트 입력
-3. 화면에 표시된 `192.168.x.x:8787` 같은 주소를 상대에게 전달
+3. 화면에 표시된 `192.168.x.x:8787` 같은 주소를 상대에게 전달하거나, 상대가 자동 discovery 목록에서 선택할 때까지 대기
 
 ### 2. Join 측
 
@@ -76,10 +83,11 @@ chess-wifi match
 chess-wifi match
 ```
 
-1. `Join a match` 선택
-2. 이름 입력
-3. Host가 알려준 `IP:PORT` 입력
-4. 연결되면 체스판이 열림
+1. 첫 화면의 `열려있는 LAN 매치` 목록에서 Host를 선택해 바로 연결
+2. 목록에 없으면 `Join by address` 선택
+3. 이름 입력
+4. Host가 알려준 `IP:PORT` 입력
+5. 연결되면 체스판이 열림
 
 ## 조작 방법
 
@@ -107,6 +115,7 @@ go build ./...
 ```text
 cmd/chess-wifi/        실제 CLI 엔트리포인트
 internal/cli/          Cobra 명령 구성
+internal/discovery/    UDP 기반 LAN 매치 발견
 internal/game/         체스 상태와 규칙 보조 로직
 internal/lan/          사설 IPv4 주소 탐지
 internal/netproto/     JSON 기반 세션 프로토콜
@@ -119,6 +128,7 @@ docs/                  아키텍처/변경/테스트 문서
 
 - 중앙 서버 없음
 - 같은 Wi-Fi 안에서 Host와 Join이 직접 TCP 연결
+- Host 대기 중에는 UDP broadcast로 매치 존재를 알림
 - Host가 체스 상태의 단일 기준(source of truth)
 - Client는 move intent만 전송
 - Host가 수를 검증한 뒤 전체 스냅샷을 다시 전송
@@ -152,13 +162,11 @@ GitHub Actions에서 다음을 확인합니다.
 
 - NAT traversal 없음
 - 인터넷 매치메이킹 없음
-- 자동 LAN discovery 없음
 - 재연결 / 이어두기 없음
 - 저장/불러오기 없음
-- 로컬 네트워크에서 포트 접근이 막히면 연결되지 않음
+- 로컬 네트워크에서 TCP `8787` 또는 UDP discovery `18787` 접근이 막히면 자동 표시 또는 연결이 제한될 수 있음
 
 ## 로드맵
 
-- 선택적 LAN discovery (기본 연결 방식은 유지)
 - 더 풍부한 상태 표시
 - 패키징과 릴리스 자동화 강화
