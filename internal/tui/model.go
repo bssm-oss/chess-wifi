@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/atotto/clipboard"
 	"github.com/bssm-oss/chess-wifi/internal/discovery"
 	"github.com/bssm-oss/chess-wifi/internal/game"
 	"github.com/bssm-oss/chess-wifi/internal/session"
@@ -26,18 +27,20 @@ const (
 )
 
 const (
-	cellWidth       = 5
-	cellHeight      = 2
-	framePaddingX   = 2
-	framePaddingY   = 1
-	headerHeight    = 3
-	panelBorderSize = 1
-	panelPaddingX   = 2
-	panelPaddingY   = 1
-	rankLabelWidth  = 2
-	boardRows       = 16
-	boardFilesY     = 16
-	discoveryEvery  = 2 * time.Second
+	cellWidth         = 5
+	cellHeight        = 2
+	compactCellWidth  = 3
+	compactCellHeight = 1
+	framePaddingX     = 2
+	framePaddingY     = 1
+	headerHeight      = 3
+	panelBorderSize   = 1
+	panelPaddingX     = 2
+	panelPaddingY     = 1
+	rankLabelWidth    = 2
+	boardRows         = 16
+	boardFilesY       = 16
+	discoveryEvery    = 2 * time.Second
 )
 
 type hostAcceptedMsg struct {
@@ -58,6 +61,10 @@ type discoveryResultMsg struct {
 	matches []discovery.Match
 	err     error
 }
+type clipboardResultMsg struct {
+	value string
+	err   error
+}
 
 type promotionChoice struct {
 	Target  string
@@ -73,30 +80,43 @@ type rect struct {
 }
 
 type model struct {
-	screen       screen
-	menuIndex    int
-	hostInputs   []textinput.Model
-	joinInputs   []textinput.Model
-	focusIndex   int
-	listener     *session.HostListener
-	peerSession  *session.PeerSession
-	snapshot     game.Snapshot
-	message      string
-	width        int
-	height       int
-	viewSide     game.Side
-	cursorFile   int
-	cursorRank   int
-	selected     string
-	legalMoves   []game.MoveOption
-	promotion    *promotionChoice
-	boardBounds  rect
-	joining      bool
-	discoveries  []discovery.Match
-	discoveryErr string
-	discoveryRun bool
-	waitingSince time.Time
-	quitting     bool
+	screen               screen
+	menuIndex            int
+	hostInputs           []textinput.Model
+	joinInputs           []textinput.Model
+	focusIndex           int
+	listener             *session.HostListener
+	peerSession          *session.PeerSession
+	snapshot             game.Snapshot
+	message              string
+	width                int
+	height               int
+	viewSide             game.Side
+	cursorFile           int
+	cursorRank           int
+	selected             string
+	legalMoves           []game.MoveOption
+	promotion            *promotionChoice
+	boardBounds          rect
+	joining              bool
+	discoveries          []discovery.Match
+	discoveryErr         string
+	discoveryRun         bool
+	menuBounds           []rect
+	discoveryBounds      []rect
+	hostInputBounds      []rect
+	hostStartBounds      rect
+	hostBackBounds       rect
+	joinInputBounds      []rect
+	joinConnectBounds    rect
+	joinBackBounds       rect
+	waitingAddressBounds []rect
+	waitingCopyBounds    []rect
+	waitingCancelBounds  rect
+	matchResignBounds    rect
+	matchQuitBounds      rect
+	waitingSince         time.Time
+	quitting             bool
 }
 
 func newModel() *model {
@@ -194,6 +214,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.menuIndex = m.menuChoiceCount() - 1
 		}
 		return m, nil
+	case clipboardResultMsg:
+		if msg.err != nil {
+			m.message = fmt.Sprintf("복사 실패: %v", msg.err)
+		} else {
+			m.message = fmt.Sprintf("복사됨: %s", msg.value)
+		}
+		return m, nil
 	case sessionEventMsg:
 		switch msg.event.Type {
 		case session.EventSnapshot:
@@ -288,6 +315,10 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.screen = screenMenu
 			m.message = "Hosting cancelled."
+		case "c":
+			if m.listener != nil && len(m.listener.Addresses) > 0 {
+				return m, copyCmd(m.listener.Addresses[0])
+			}
 		}
 		return m, nil
 	case screenMatch:
@@ -316,6 +347,24 @@ func (m *model) menuChoiceCount() int {
 
 func (m *model) canScanDiscovery() bool {
 	return m.listener == nil && m.peerSession == nil && !m.joining && (m.screen == screenMenu || m.screen == screenJoin || m.screen == screenError)
+}
+
+func (m *model) compactLayout() bool {
+	return (m.width > 0 && m.width < 100) || (m.height > 0 && m.height < 30)
+}
+
+func (m *model) cellWidth() int {
+	if m.compactLayout() {
+		return compactCellWidth
+	}
+	return cellWidth
+}
+
+func (m *model) cellHeight() int {
+	if m.compactLayout() {
+		return compactCellHeight
+	}
+	return cellHeight
 }
 
 func (m *model) side() game.Side {
@@ -391,11 +440,132 @@ func (m *model) handleMatchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	if m.screen != screenMatch {
-		return m, nil
-	}
 	if msg.Action != tea.MouseActionPress || msg.Button != tea.MouseButtonLeft {
 		return m, nil
+	}
+	switch m.screen {
+	case screenMenu:
+		return m.handleMenuMouse(msg)
+	case screenHost:
+		return m.handleHostMouse(msg)
+	case screenJoin:
+		return m.handleJoinMouse(msg)
+	case screenWaiting:
+		return m.handleWaitingMouse(msg)
+	case screenMatch:
+		return m.handleMatchMouse(msg)
+	case screenError:
+		m.screen = screenMenu
+		m.message = "새 매치를 시작할 수 있습니다."
+		m.peerSession = nil
+		m.viewSide = game.White
+		m.listener = nil
+		m.clearSelection()
+		return m, nil
+	default:
+		return m, nil
+	}
+}
+
+func (m *model) handleMenuMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	for i, bounds := range m.menuBounds {
+		if bounds.contains(msg.X, msg.Y) {
+			m.menuIndex = i
+			if i == 0 {
+				m.focusHostField(0)
+				m.screen = screenHost
+				return m, nil
+			}
+			if i == 1 {
+				m.focusJoinField(0)
+				m.screen = screenJoin
+				return m, nil
+			}
+			return m.startDiscoveredJoin(m.discoveries[i-2])
+		}
+	}
+	return m.handleDiscoveryMouse(msg)
+}
+
+func (m *model) handleHostMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	for i, bounds := range m.hostInputBounds {
+		if bounds.contains(msg.X, msg.Y) {
+			m.focusHostField(i)
+			return m, nil
+		}
+	}
+	if m.hostStartBounds.contains(msg.X, msg.Y) {
+		return m.startHosting()
+	}
+	if m.hostBackBounds.contains(msg.X, msg.Y) {
+		m.screen = screenMenu
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m *model) handleJoinMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	for i, bounds := range m.joinInputBounds {
+		if bounds.contains(msg.X, msg.Y) {
+			m.focusJoinField(i)
+			return m, nil
+		}
+	}
+	if m.joinConnectBounds.contains(msg.X, msg.Y) {
+		return m.startJoin()
+	}
+	if m.joinBackBounds.contains(msg.X, msg.Y) {
+		m.screen = screenMenu
+		return m, nil
+	}
+	return m.handleDiscoveryMouse(msg)
+}
+
+func (m *model) handleDiscoveryMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	for i, bounds := range m.discoveryBounds {
+		if bounds.contains(msg.X, msg.Y) && i < len(m.discoveries) {
+			return m.startDiscoveredJoin(m.discoveries[i])
+		}
+	}
+	return m, nil
+}
+
+func (m *model) handleWaitingMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	if m.listener == nil {
+		return m, nil
+	}
+	for i, bounds := range m.waitingAddressBounds {
+		if bounds.contains(msg.X, msg.Y) && i < len(m.listener.Addresses) {
+			return m, copyCmd(m.listener.Addresses[i])
+		}
+	}
+	for i, bounds := range m.waitingCopyBounds {
+		if bounds.contains(msg.X, msg.Y) && i < len(m.listener.Addresses) {
+			return m, copyCmd(m.listener.Addresses[i])
+		}
+	}
+	if m.waitingCancelBounds.contains(msg.X, msg.Y) {
+		_ = m.listener.Close()
+		m.listener = nil
+		m.screen = screenMenu
+		m.message = "Hosting cancelled."
+	}
+	return m, nil
+}
+
+func (m *model) handleMatchMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	if m.matchResignBounds.contains(msg.X, msg.Y) && m.peerSession != nil {
+		m.message = "Resigning match..."
+		return m, func() tea.Msg {
+			return sessionEventMsg{event: session.Event{Type: session.EventError, Message: resignErr(m.peerSession.Resign())}}
+		}
+	}
+	if m.matchQuitBounds.contains(msg.X, msg.Y) {
+		if m.peerSession != nil {
+			_ = m.peerSession.Close()
+		}
+		m.quitting = true
+		return m, tea.Quit
 	}
 	if m.promotion != nil {
 		if choice := m.promotionFromMouse(msg.X, msg.Y); choice >= 0 {
@@ -570,6 +740,12 @@ func scanDiscoveryCmd() tea.Cmd {
 	}
 }
 
+func copyCmd(value string) tea.Cmd {
+	return func() tea.Msg {
+		return clipboardResultMsg{value: value, err: clipboard.WriteAll(value)}
+	}
+}
+
 func (m *model) clearSelection() {
 	m.selected = ""
 	m.legalMoves = nil
@@ -627,4 +803,8 @@ func resignErr(err error) string {
 		return err.Error()
 	}
 	return "Resignation sent."
+}
+
+func (r rect) contains(x, y int) bool {
+	return x >= r.x && x < r.x+r.w && y >= r.y && y < r.y+r.h
 }

@@ -40,6 +40,7 @@ var (
 
 	menuItemStyle   = lipgloss.NewStyle().Foreground(colorText)
 	menuActiveStyle = lipgloss.NewStyle().Foreground(colorAccent).Bold(true)
+	buttonStyle     = lipgloss.NewStyle().Foreground(colorAccent).Bold(true)
 
 	inputStyle = lipgloss.NewStyle().
 			Foreground(colorText).
@@ -59,9 +60,7 @@ var (
 
 	selectedSquareStyle = lipgloss.NewStyle().
 				Foreground(colorText).
-				Background(colorAccent).
-				Border(lipgloss.NormalBorder()).
-				BorderForeground(colorText)
+				Background(colorAccent)
 
 	legalSquareStyle = lipgloss.NewStyle().
 				Foreground(colorBackground).
